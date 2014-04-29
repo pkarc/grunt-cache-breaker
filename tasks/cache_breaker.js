@@ -8,6 +8,8 @@
 
 'use strict';
 
+var crypto = require('crypto');
+
 /**
 
 Usage :
@@ -57,12 +59,18 @@ var removePrefixes = function( filename, prefix ) {
 };
 
 /**
- * Append a timestamp to a string
+ * Append a timestamp or prepend hash to a string
  * @param {String} filename
  * @returns {String}
  */
-var makeNewUrl = function( filename ) {
-  return (filename + '?rel=' + new Date().getTime());
+var makeNewUrl = function( filename , options ) {
+	if(!options.hash){
+	  	return (filename + '?rel=' + new Date().getTime());
+	}else{
+		var hash = hashit( filename, options.algorithm, options.encoding);
+		var prefix = hash.slice(0, options.length);
+		return (filename.replace(/([^\/]+)$/, prefix + "$1"));
+	}
 };
 
 /**
@@ -89,6 +97,23 @@ var msgs = {
     },
     generic : 'Sorry, there was an unknown problem. Check all your config properties.'
   }
+};
+
+/**
+ * return file's content hash
+ * @param {String} filepath
+ * @param {String} algorithm
+ * @param {String} encoding
+ * @param {String} fileEncoding
+ * @returns {String} hash digest
+ */
+var hashit = function(filepath, algorithm, fileEncoding) {
+  	
+	var hash = crypto.createHash(algorithm);
+	grunt.log.verbose.write('Hashing ' + filepath + '...');
+	hash.update(grunt.file.read(filepath), fileEncoding);
+	return hash.digest('hex');
+	
 };
 
 module.exports = function(grunt) {
@@ -137,7 +162,7 @@ module.exports = function(grunt) {
     var data = grunt.file.read( f.src );
     var cleanUrl   = removePrefixes( options.asset_url, options.remove ),
           regex    = makeTagRegex( cleanUrl ),
-          url      = makeNewUrl( cleanUrl ),
+          url      = makeNewUrl( cleanUrl, options ),
           match    = data.match( regex ),
           newData;
 
@@ -158,7 +183,11 @@ module.exports = function(grunt) {
 
     // Merge task-specific and/or target-specific options with these defaults.
     var options = this.options({
-        remove : 'app' // default
+        remove : 'app', // default
+        hash : false, // default
+        encoding: 'utf8',
+      	algorithm: 'md5',
+      	length: 8
     });
 
     if( !this.data.asset_url ) {
@@ -168,6 +197,9 @@ module.exports = function(grunt) {
     if( !this.data.file && this.files.length < 1) {
       return e( msgs.errors.config('file or files') );
     }
+    
+    // Is hash variable defined, if not set to false
+    options.hash = this.data.options.hash ? this.data.options.hash : false;
 
     // Make asset_url always availble to options.
     options.asset_url = this.data.asset_url;
